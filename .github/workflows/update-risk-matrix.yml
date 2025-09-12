@@ -1,5 +1,37 @@
-scripts/
-  ├── requirements.txt
-  ├── risk_matrix_calculator.py
-  ├── data_uploader.py
-data/
+name: Update Risk Matrix Data
+
+on:
+  schedule:
+    - cron: '30 22 * * 1-5'  # 工作日北京时间 6:30
+
+  workflow_dispatch:  # 手动触发
+
+jobs:
+  update-data:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Calculate Risk Matrix Data
+        run: |
+          python scripts/risk_matrix_calculator.py
+
+      - name: Upload to Tencent Cloud COS
+        run: |
+          python scripts/data_uploader.py
+        env:
+          TENCENT_SECRET_ID: ${{ secrets.TENCENT_SECRET_ID }}
+          TENCENT_SECRET_KEY: ${{ secrets.TENCENT_SECRET_KEY }}
+          COS_BUCKET_NAME: ${{ secrets.COS_BUCKET_NAME }}
+          COS_REGION: ${{ secrets.COS_REGION }}
