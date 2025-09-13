@@ -1,0 +1,50 @@
+{
+  "update_time": "2025-09-14T05:55:33.338448",
+  "markets": [
+    {
+      "symbol": "^GSPC",
+      "name": "S&P 500",
+      "current_price": 6584.29,
+      "volatility": 8.82,
+      "var_95": -0.64,
+      "var_99": -0.68,
+      "risk_level": "Low"
+    },
+    {
+      "symbol": "^IXIC",
+      "name": "NASDAQ",
+      "current_price": 22141.1,
+      "volatility": 12.2,
+      "var_95": -1.15,
+      "var_99": -1.39,
+      "risk_level": "Low"
+    },
+    {
+      "symbol": "^DJI",
+      "name": "Dow Jones",
+      "current_price": 45834.22,
+      "volatility": 10.14,
+      "var_95": -0.59,
+      "var_99": -0.73,
+      "risk_level": "Low"
+    },
+    {
+      "symbol": "000001.SS",
+      "name": "Shanghai Composite",
+      "current_price": 3870.6,
+      "volatility": 14.63,
+      "var_95": -1.24,
+      "var_99": -1.65,
+      "risk_level": "Low"
+    },
+    {
+      "symbol": "^HSI",
+      "name": "Hang Seng",
+      "current_price": 26388.16,
+      "volatility": 17.97,
+      "var_95": -1.18,
+      "var_99": -1.25,
+      "risk_level": "Medium"
+    }
+  ]
+}
