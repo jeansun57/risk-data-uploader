@@ -590,7 +590,7 @@ def main():
     print("="*60)
     
     # 智能获取API Key
-    FRED_API_KEY = "b847c3439da156aed56440cd5685d03a"  # 直接设置您的API Key
+    FRED_API_KEY = ""  # 直接设置您的API Key
     
     if not FRED_API_KEY or FRED_API_KEY == "your_api_key_here":
         FRED_API_KEY = get_fred_api_key()
