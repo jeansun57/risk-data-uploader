@@ -22,7 +22,7 @@ jobs:
         run: |
           pip install -r scripts/requirements.txt
 
-      - name: Setup V2Ray Proxy
+      - name: Setup V2Ray Proxy for Data Collection
         run: |
           # 下载并安装 V2Ray
           curl -L -o v2ray-linux.zip https://github.com/v2fly/v2ray-core/releases/latest/download/v2ray-linux-64.zip
@@ -65,54 +65,81 @@ jobs:
                   "security": "none"
                 }
               }
-            ],
-            "routing": {
-              "rules": [
-                {
-                  "type": "field",
-                  "outboundTag": "direct",
-                  "domain": ["localhost", "127.0.0.1"]
-                }
-              ]
-            }
+            ]
           }
           EOF
           
-          # 启动 V2Ray
-          ./v2ray/v2ray -config v2ray/config.json &
+          # 启动 V2Ray （使用正确的命令格式）
+          ./v2ray/v2ray run -config v2ray/config.json > v2ray.log 2>&1 &
           V2RAY_PID=$!
           echo "V2RAY_PID=$V2RAY_PID" >> $GITHUB_ENV
           
           # 等待 V2Ray 启动
-          sleep 5
+          echo "⏱️ 等待V2Ray启动..."
+          sleep 10
+          
+          # 检查V2Ray进程是否还在运行
+          if ps -p $V2RAY_PID > /dev/null; then
+              echo "✅ V2Ray进程运行正常 (PID: $V2RAY_PID)"
+          else
+              echo "❌ V2Ray进程已退出，查看日志:"
+              cat v2ray.log
+              exit 1
+          fi
           
           # 测试代理连接
-          echo "测试代理连接..."
-          curl --socks5 127.0.0.1:1080 --connect-timeout 10 https://httpbin.org/ip || echo "代理可能未就绪，继续执行..."
+          echo "🔄 测试代理连接..."
+          for i in {1..3}; do
+              if curl --socks5 127.0.0.1:1080 --connect-timeout 10 https://httpbin.org/ip; then
+                  echo "✅ 代理连接测试成功"
+                  break
+              else
+                  echo "⚠️ 第${i}次代理测试失败，等待5秒后重试..."
+                  sleep 5
+                  if [ $i -eq 3 ]; then
+                      echo "❌ 代理连接测试失败，查看V2Ray日志:"
+                      cat v2ray.log
+                      # 不退出，继续执行数据收集
+                  fi
+              fi
+          done
 
-      - name: Calculate Risk Matrix Data
+      - name: Create data directory
+        run: |
+          mkdir -p data
+
+      - name: Calculate Risk Matrix Data (with proxy)
         env:
           USE_PROXY: "true"
           PROXY_HOST: "127.0.0.1"
           PROXY_PORT: "1080"
+          FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
         run: |
           python scripts/risk_matrix_calculator.py
 
-      - name: Upload to Tencent Cloud COS
+      - name: Stop V2Ray Proxy
         run: |
-          python scripts/data_uploader.py
+          if [ ! -z "$V2RAY_PID" ]; then
+            kill $V2RAY_PID 2>/dev/null || true
+            echo "🛑 V2Ray代理已停止"
+          fi
+
+      - name: Upload to Tencent Cloud COS (direct connection)
         env:
           TENCENT_SECRET_ID: ${{ secrets.TENCENT_SECRET_ID }}
           TENCENT_SECRET_KEY: ${{ secrets.TENCENT_SECRET_KEY }}
           COS_BUCKET_NAME: ${{ secrets.COS_BUCKET_NAME }}
           COS_REGION: ${{ secrets.COS_REGION }}
-          USE_PROXY: "true"
-          PROXY_HOST: "127.0.0.1"
-          PROXY_PORT: "1080"
-
-      - name: Cleanup V2Ray
-        if: always()
+          USE_PROXY: "false"
         run: |
-          if [ ! -z "$V2RAY_PID" ]; then
-            kill $V2RAY_PID 2>/dev/null || true
-          fi
+          python scripts/data_uploader.py
+
+      - name: Archive logs and data
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: execution-logs
+          path: |
+            data/
+            v2ray.log
+          retention-days: 7
