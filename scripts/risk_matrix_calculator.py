@@ -7,7 +7,11 @@ from datetime import datetime, timedelta
 import warnings
 import os
 import json
+import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 warnings.filterwarnings('ignore')
+
 
 
 
@@ -138,6 +142,45 @@ class DataManager:
                     print("   请确保API Key已激活")
         else:
             print("⚠️  未提供FRED API Key，将跳过FRED数据")
+    def create_yahoo_session(self):
+        """创建带代理的Yahoo Finance会话"""
+        import requests
+        from requests.adapters import HTTPAdapter
+        from urllib3.util.retry import Retry
+        
+        session = requests.Session()
+        
+        # 检查是否需要使用代理
+        if os.environ.get('USE_PROXY') == 'true':
+            proxy_host = os.environ.get('PROXY_HOST', '127.0.0.1')
+            proxy_port = os.environ.get('PROXY_PORT', '1080')
+            
+            proxies = {
+                'http': f'socks5://{proxy_host}:{proxy_port}',
+                'https': f'socks5://{proxy_host}:{proxy_port}'
+            }
+            session.proxies = proxies
+            print(f"🌐 Yahoo Finance使用代理: {proxy_host}:{proxy_port}")
+        else:
+            print("🌐 Yahoo Finance使用直连")
+        
+        # 设置重试策略
+        retry_strategy = Retry(
+            total=3,
+            backoff_factor=1,
+            status_forcelist=[429, 500, 502, 503, 504],
+        )
+        
+        adapter = HTTPAdapter(max_retries=retry_strategy)
+        session.mount("http://", adapter)
+        session.mount("https://", adapter)
+        
+        # 设置请求头
+        session.headers.update({
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        })
+        
+        return session
         
     def rate_limit(self, source, min_interval=0.5):
         """增强的频次控制"""
@@ -324,7 +367,7 @@ class GlobalMacroDataLoader(DataManager):
         for symbol in corrected_symbols:
             try:
                 self.rate_limit('yahoo')
-                ticker = yf.Ticker(symbol)
+                ticker = yf.Ticker(symbol,session=self.yahoo_session)
                 
                 # 多种数据获取方式
                 data = None
@@ -590,7 +633,7 @@ def main():
     print("="*60)
     
     # 智能获取API Key
-    FRED_API_KEY = ""  # 直接设置您的API Key
+    FRED_API_KEY = "b847c3439da156aed56440cd5685d03a"  # 直接设置您的API Key
     
     if not FRED_API_KEY or FRED_API_KEY == "your_api_key_here":
         FRED_API_KEY = get_fred_api_key()
