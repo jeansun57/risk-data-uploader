@@ -3,7 +3,6 @@ name: Update Risk Matrix Data
 on:
   schedule:
     - cron: '30 22 * * 1-5'  # 工作日北京时间 6:30
-
   workflow_dispatch:  # 手动触发
 
 jobs:
@@ -23,7 +22,79 @@ jobs:
         run: |
           pip install -r scripts/requirements.txt
 
+      - name: Setup V2Ray Proxy
+        run: |
+          # 下载并安装 V2Ray
+          curl -L -o v2ray-linux.zip https://github.com/v2fly/v2ray-core/releases/latest/download/v2ray-linux-64.zip
+          unzip v2ray-linux.zip -d v2ray
+          chmod +x v2ray/v2ray
+          
+          # 创建 V2Ray 配置文件
+          cat > v2ray/config.json << EOF
+          {
+            "inbounds": [
+              {
+                "port": 1080,
+                "protocol": "socks",
+                "settings": {
+                  "auth": "noauth",
+                  "udp": true
+                }
+              }
+            ],
+            "outbounds": [
+              {
+                "protocol": "vmess",
+                "settings": {
+                  "vnext": [
+                    {
+                      "address": "${{ secrets.VMESS_HOST }}",
+                      "port": ${{ secrets.VMESS_PORT }},
+                      "users": [
+                        {
+                          "id": "${{ secrets.VMESS_UUID }}",
+                          "alterId": ${{ secrets.VMESS_ALTERID }},
+                          "security": "auto"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "streamSettings": {
+                  "network": "${{ secrets.VMESS_NETWORK }}",
+                  "security": "none"
+                }
+              }
+            ],
+            "routing": {
+              "rules": [
+                {
+                  "type": "field",
+                  "outboundTag": "direct",
+                  "domain": ["localhost", "127.0.0.1"]
+                }
+              ]
+            }
+          }
+          EOF
+          
+          # 启动 V2Ray
+          ./v2ray/v2ray -config v2ray/config.json &
+          V2RAY_PID=$!
+          echo "V2RAY_PID=$V2RAY_PID" >> $GITHUB_ENV
+          
+          # 等待 V2Ray 启动
+          sleep 5
+          
+          # 测试代理连接
+          echo "测试代理连接..."
+          curl --socks5 127.0.0.1:1080 --connect-timeout 10 https://httpbin.org/ip || echo "代理可能未就绪，继续执行..."
+
       - name: Calculate Risk Matrix Data
+        env:
+          USE_PROXY: "true"
+          PROXY_HOST: "127.0.0.1"
+          PROXY_PORT: "1080"
         run: |
           python scripts/risk_matrix_calculator.py
 
@@ -35,3 +106,13 @@ jobs:
           TENCENT_SECRET_KEY: ${{ secrets.TENCENT_SECRET_KEY }}
           COS_BUCKET_NAME: ${{ secrets.COS_BUCKET_NAME }}
           COS_REGION: ${{ secrets.COS_REGION }}
+          USE_PROXY: "true"
+          PROXY_HOST: "127.0.0.1"
+          PROXY_PORT: "1080"
+
+      - name: Cleanup V2Ray
+        if: always()
+        run: |
+          if [ ! -z "$V2RAY_PID" ]; then
+            kill $V2RAY_PID 2>/dev/null || true
+          fi
